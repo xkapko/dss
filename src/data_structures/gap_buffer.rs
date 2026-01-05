@@ -38,29 +38,31 @@ impl ToString for GapBuffer {
                 .chain(&self.buffer[self.right + 1..]),
         );
 
-        String::from_utf8(out).expect("Unable to construct string from a GapBuffer.")
+        let string = String::from_utf8(out).expect("Unable to construct string from a GapBuffer.");
+        string.chars().filter(|&c| c != '\0').collect()
     }
 }
 
+#[allow(unused)]
 impl GapBuffer {
     pub fn new(capacity: usize) -> Self {
+        let mut vec = Vec::with_capacity(capacity);
+        vec.fill(0);
         Self {
             left: 0,
             right: capacity - 1,
             capacity,
-            buffer: Vec::with_capacity(capacity).into_boxed_slice(),
+            buffer: vec.into_boxed_slice(),
         }
     }
 
     /// Grow the `GapBuffer` by `GROW_STEP` bytes.
     fn grow(&mut self) {
-        let mut new_buff: Vec<u8> = vec![0u8; self.capacity + GROW_BY];
+        let mut new_buff: Vec<u8> = Vec::with_capacity(self.capacity + GROW_BY);
 
         new_buff.extend_from_slice(&self.buffer[0..self.left]);
-        new_buff.splice(
-            self.right + GROW_BY..new_buff.capacity(),
-            self.buffer[self.right..].iter().copied(),
-        );
+        new_buff.extend_from_slice(&vec![0; self.right + GROW_BY - self.left]);
+        new_buff.extend_from_slice(&self.buffer[self.right..]);
 
         self.right += GROW_BY;
         self.capacity += GROW_BY;
@@ -82,7 +84,7 @@ impl GapBuffer {
     /// Insert one char at the current cursor position.
     /// If the gap is empty, grow the buffer as needed.
     pub fn insert_char(&mut self, c: char) {
-        self.insert_byte(c as u8)
+        self.insert(c.to_string().as_bytes())
     }
 
     /// Insert a slice of bytes on the current cursor position.
@@ -90,6 +92,10 @@ impl GapBuffer {
     pub fn insert(&mut self, slice: &[u8]) {
         // grow enough to accommodate the new slice
         let len = slice.len();
+        if len == 0 {
+            return;
+        }
+
         while len > self.right - self.left {
             self.grow();
         }
@@ -156,6 +162,13 @@ impl GapBuffer {
         } else {
             self.right + n
         }
+    }
+
+    /// Clears the gap buffer.
+    pub fn clear(&mut self) {
+        self.right = self.capacity - 1;
+        self.left = 0;
+        self.buffer.fill(0);
     }
 
     /// Return the start and end indecies of the gap.
